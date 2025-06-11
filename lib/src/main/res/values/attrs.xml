@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<resources>
+    <declare-styleable name="DoraFlipperView">
+        <!-- 翻页间隔，单位毫秒 -->
+        <attr name="dview_fv_flipInterval" format="integer" />
+    </declare-styleable>
+</resources>
