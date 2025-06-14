@@ -4,7 +4,8 @@
     <declare-styleable name="DoraFlipperView">
         <!-- 翻页间隔，单位毫秒 -->
         <attr name="dview_fv_flipInterval" format="integer"/>
-        <attr name="dview_fv_textColor" format="color"/>
-        <attr name="dview_fv_textSize" format="dimension"/>
+        <attr name="dview_fv_textColor" format="color|reference"/>
+        <attr name="dview_fv_textSize" format="dimension|reference"/>
+        <attr name="dview_fv_padding" format="dimension|reference"/>
     </declare-styleable>
 </resources>

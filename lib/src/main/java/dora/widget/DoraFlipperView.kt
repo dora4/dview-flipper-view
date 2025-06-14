@@ -21,14 +21,15 @@ import java.util.concurrent.LinkedBlockingQueue
  *
  * A vertical scrolling announcement marquee control that cycles through
  * messages stored in a LinkedBlockingQueue. Supports custom XML attributes:
- *  - app:flipInterval  (milliseconds)
- *  - app:textColor     (color)
- *  - app:textSize      (dimension, in sp or px)
+ *  - app:dview_fv_flipInterval  (milliseconds)
+ *  - app:dview_fv_textColor     (color)
+ *  - app:dview_fv_textSize      (dimension, in sp or px)
+ *  - app:dview_fv_padding       (dimension, padding in dp or px)
  *
  * Now with:
  * 1. Direct next-item display without preview of the following item.
- * 2. Item click callback support.
- * 3. Customizable text color and size.
+ * 2. Unified listener for click, start, and finish events.
+ * 3. Customizable text color, size, and padding.
  */
 class DoraFlipperView @JvmOverloads constructor(
     context: Context,
@@ -39,31 +40,35 @@ class DoraFlipperView @JvmOverloads constructor(
         private const val MSG_ADD = 1
         private const val MSG_NEXT = 2
         private const val DEFAULT_INTERVAL = 10_000L
-        private const val DEFAULT_TEXT_COLOR = Color.BLACK
+        private val DEFAULT_TEXT_COLOR = Color.BLACK
         private const val DEFAULT_TEXT_SIZE_SP = 14f
+        private const val DEFAULT_PADDING_DP = 10f
     }
 
-    // Queue of pending messages
     private val queue = LinkedBlockingQueue<String>()
     private val uiHandler = Handler(Looper.getMainLooper())
-
-    // Display properties
-    private val flipInterval: Long
-    private val textColor: Int
-    private val textSizePx: Float
-
-    // Background thread and handler
     private val flipperThread = HandlerThread("DoraFlipperThread").apply { start() }
     private val workerHandler: Handler
 
-    // Track current text for click events
-    private var currentText: String? = null
+    private val flipInterval: Long
+    private val textColor: Int
+    private val textSizePx: Float
+    private val paddingPx: Int
 
-    // External click listener
-    private var onItemClickListener: ((String) -> Unit)? = null
+    private var currentText: String? = null
+    private var hasStarted = false
+
+    interface FlipperListener {
+        /** Called when the current item is clicked */
+        fun onItemClick(text: String)
+        /** Called when the flipper shows the very first item */
+        fun onFlipStart()
+        /** Called after the flipper has shown the last queued item */
+        fun onFlipFinish()
+    }
+    private var flipperListener: FlipperListener? = null
 
     init {
-        // Obtain custom attributes
         val ta = context.obtainStyledAttributes(attrs, R.styleable.DoraFlipperView)
         flipInterval = ta.getInt(
             R.styleable.DoraFlipperView_dview_fv_flipInterval,
@@ -73,15 +78,23 @@ class DoraFlipperView @JvmOverloads constructor(
             R.styleable.DoraFlipperView_dview_fv_textColor,
             DEFAULT_TEXT_COLOR
         )
-        // textSize attribute in px; default from SP
-        val defaultPx = TypedValue.applyDimension(
+        val defaultTextPx = TypedValue.applyDimension(
             TypedValue.COMPLEX_UNIT_SP,
             DEFAULT_TEXT_SIZE_SP,
             resources.displayMetrics
         )
         textSizePx = ta.getDimension(
             R.styleable.DoraFlipperView_dview_fv_textSize,
-            defaultPx
+            defaultTextPx
+        )
+        val defaultPaddingPx = TypedValue.applyDimension(
+            TypedValue.COMPLEX_UNIT_DIP,
+            DEFAULT_PADDING_DP,
+            resources.displayMetrics
+        ).toInt()
+        paddingPx = ta.getDimensionPixelSize(
+            R.styleable.DoraFlipperView_dview_fv_padding,
+            defaultPaddingPx
         )
         ta.recycle()
 
@@ -97,15 +110,15 @@ class DoraFlipperView @JvmOverloads constructor(
                 ellipsize = TextUtils.TruncateAt.END
                 setTextColor(textColor)
                 setTextSize(TypedValue.COMPLEX_UNIT_PX, textSizePx)
+                setPadding(paddingPx, paddingPx, paddingPx, paddingPx)
                 setOnClickListener {
                     currentText?.let { text ->
-                        onItemClickListener?.invoke(text)
+                        flipperListener?.onItemClick(text)
                     }
                 }
             }
         }
 
-        // Initialize worker handler
         workerHandler = object : Handler(flipperThread.looper) {
             override fun handleMessage(msg: Message) {
                 when (msg.what) {
@@ -148,23 +161,29 @@ class DoraFlipperView @JvmOverloads constructor(
     }
 
     /**
-     * Add a new text to the queue and display it immediately.
+     * Add a new text announcement and display immediately.
      */
     fun addText(text: String) {
-        workerHandler.obtainMessage(MSG_ADD, text).also { workerHandler.sendMessage(it) }
+        workerHandler.obtainMessage(MSG_ADD, text).also { it.sendToTarget() }
     }
 
     /**
-     * Set a listener to receive click callbacks when the current item is tapped.
+     * Set the listener for flipper events.
      */
-    fun setOnItemClickListener(listener: (String) -> Unit) {
-        onItemClickListener = listener
+    fun setFlipperListener(listener: FlipperListener) {
+        flipperListener = listener
     }
 
     private fun showText(text: String) {
         uiHandler.post {
             currentText = text
             setText(text)
+            if (!hasStarted) {
+                hasStarted = true
+                flipperListener?.onFlipStart()
+            } else if (queue.isEmpty()) {
+                flipperListener?.onFlipFinish()
+            }
         }
     }
 }
