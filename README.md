@@ -105,6 +105,9 @@ binding.fv1.setFlipperListener(object : DoraFlipperView.FlipperListener {
             override fun onFlipStart() {
             }
 
+            override fun onLoadText(index: Int, text: String) {
+            }
+
             override fun onItemClick(index: Int, text: String) {
             }
         })

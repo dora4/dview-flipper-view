@@ -46,9 +46,11 @@ class DoraFlipperView @JvmOverloads constructor(
 
     interface FlipperListener {
         fun onItemClick(index: Int, text: String)
+        fun onLoadText(index: Int, text: String)
         fun onFlipStart()
         fun onFlipFinish()
     }
+
     private var flipperListener: FlipperListener? = null
 
     init {
@@ -108,25 +110,29 @@ class DoraFlipperView @JvmOverloads constructor(
                     MSG_ADD -> {
                         val text = msg.obj as? String ?: return
                         queue.offer(text)
-                        if (currentIndex == -1) currentIndex = 0
-                        showText(text)
-                        removeMessages(MSG_NEXT)
-                        sendEmptyMessageDelayed(MSG_NEXT, flipInterval)
+                        if (currentIndex == -1) {
+                            currentIndex = 0
+                            sendEmptyMessage(MSG_NEXT)
+                        }
                     }
                     MSG_NEXT -> {
-                        val next = queue.poll()
+                        val next = queue.peek()
                         if (!next.isNullOrEmpty()) {
-                            currentIndex++
+                            currentText = next
                             showText(next)
-                            removeMessages(MSG_NEXT)
-                            sendEmptyMessageDelayed(MSG_NEXT, flipInterval)
-                        } else {
-                            // 队列已空，先显示最后一条 flipInterval，再触发 complete
-                            uiHandler.postDelayed({
-                                setText("")
-                                currentIndex = -1
-                                flipperListener?.onFlipFinish()
-                            }, flipInterval)
+                            flipperListener?.onLoadText(currentIndex, next)
+                            currentIndex++
+                            queue.poll()
+                            if (queue.isNotEmpty()) {
+                                removeMessages(MSG_NEXT)
+                                sendEmptyMessageDelayed(MSG_NEXT, flipInterval)
+                            } else {
+                                uiHandler.postDelayed({
+                                    setText("")
+                                    currentIndex = -1
+                                    flipperListener?.onFlipFinish()
+                                }, flipInterval)
+                            }
                         }
                     }
                 }
@@ -175,7 +181,6 @@ class DoraFlipperView @JvmOverloads constructor(
 
     private fun showText(text: String) {
         uiHandler.post {
-            currentText = text
             setText(text)
             if (!hasStarted) {
                 hasStarted = true
