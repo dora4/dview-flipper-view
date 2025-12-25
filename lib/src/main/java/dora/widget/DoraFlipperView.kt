@@ -168,6 +168,16 @@ class DoraFlipperView @JvmOverloads constructor(
     }
 
     /**
+     * Clear all queued texts and reset flipper state.
+     */
+    fun clear() {
+        workerHandler.removeCallbacksAndMessages(null)
+        queue.clear()
+        currentText = null
+        hasStarted = false
+    }
+
+    /**
      * Set the listener for flipper events.
      */
     fun setFlipperListener(listener: FlipperListener) {
