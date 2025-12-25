@@ -14,50 +14,23 @@ import android.view.animation.TranslateAnimation
 import android.widget.TextSwitcher
 import android.widget.TextView
 import dora.widget.flipperview.R
-import java.util.ArrayDeque
+import java.util.concurrent.LinkedBlockingQueue
 
-/**
- * DoraFlipperView
- *
- * 垂直滚动文字控件
- *
- * 特性：
- * 1. 支持无限条数据
- * 2. 支持 WebSocket 推送消息插队（最前显示）
- * 3. 历史消息顺序轮播
- * 4. 单线程队列调度，避免并发问题
- * 5. 生命周期安全，自动清理 Handler
- *
- * XML Attributes:
- *  - app:dview_fv_flipInterval  翻页间隔（毫秒）
- *  - app:dview_fv_textColor     文本颜色
- *  - app:dview_fv_textSize      文本大小
- *  - app:dview_fv_padding       内边距
- */
 class DoraFlipperView @JvmOverloads constructor(
     context: Context,
     attrs: AttributeSet? = null
 ) : TextSwitcher(context, attrs) {
 
     companion object {
-        /** 如WebSocket推送：高优先级，插到最前 */
-        private const val MSG_ADD_FIRST = 0
-
-        /** 历史消息：普通追加 */
-        private const val MSG_ADD_LAST = 1
-
-        /** 自动翻页 */
+        private const val MSG_ADD = 1
         private const val MSG_NEXT = 2
-
         private const val DEFAULT_INTERVAL = 10_000L
-        private val DEFAULT_TEXT_COLOR = Color.BLACK
+        private const val DEFAULT_TEXT_COLOR = Color.BLACK
         private const val DEFAULT_TEXT_SIZE_SP = 14f
         private const val DEFAULT_PADDING_DP = 10f
     }
 
-    /** 双端队列：支持头插 / 尾插 */
-    private val queue: ArrayDeque<String> = ArrayDeque()
-
+    private val queue = LinkedBlockingQueue<String>()
     private val uiHandler = Handler(Looper.getMainLooper())
     private val flipperThread = HandlerThread("DoraFlipperThread").apply { start() }
     private val workerHandler: Handler
@@ -68,19 +41,12 @@ class DoraFlipperView @JvmOverloads constructor(
     private val paddingPx: Int
 
     private var currentText: String? = null
+    private var currentIndex: Int = -1
     private var hasStarted = false
 
-    /**
-     * 翻页监听器
-     */
     interface FlipperListener {
-        /** 点击当前文本 */
-        fun onItemClick(text: String)
-
-        /** 第一次开始播放 */
+        fun onItemClick(index: Int, text: String)
         fun onFlipStart()
-
-        /** 队列播放完毕 */
         fun onFlipFinish()
     }
 
@@ -88,39 +54,32 @@ class DoraFlipperView @JvmOverloads constructor(
 
     init {
         val ta = context.obtainStyledAttributes(attrs, R.styleable.DoraFlipperView)
-
         flipInterval = ta.getInt(
             R.styleable.DoraFlipperView_dview_fv_flipInterval,
             DEFAULT_INTERVAL.toInt()
         ).toLong()
-
         textColor = ta.getColor(
             R.styleable.DoraFlipperView_dview_fv_textColor,
             DEFAULT_TEXT_COLOR
         )
-
         val defaultTextPx = TypedValue.applyDimension(
             TypedValue.COMPLEX_UNIT_SP,
             DEFAULT_TEXT_SIZE_SP,
             resources.displayMetrics
         )
-
         textSizePx = ta.getDimension(
             R.styleable.DoraFlipperView_dview_fv_textSize,
             defaultTextPx
         )
-
         val defaultPaddingPx = TypedValue.applyDimension(
             TypedValue.COMPLEX_UNIT_DIP,
             DEFAULT_PADDING_DP,
             resources.displayMetrics
         ).toInt()
-
         paddingPx = ta.getDimensionPixelSize(
             R.styleable.DoraFlipperView_dview_fv_padding,
             defaultPaddingPx
         )
-
         ta.recycle()
 
         animateFirstView = false
@@ -137,7 +96,9 @@ class DoraFlipperView @JvmOverloads constructor(
                 setTextSize(TypedValue.COMPLEX_UNIT_PX, textSizePx)
                 setPadding(paddingPx, paddingPx, paddingPx, paddingPx)
                 setOnClickListener {
-                    currentText?.let { flipperListener?.onItemClick(it) }
+                    currentText?.let { text ->
+                        flipperListener?.onItemClick(currentIndex, text)
+                    }
                 }
             }
         }
@@ -145,36 +106,23 @@ class DoraFlipperView @JvmOverloads constructor(
         workerHandler = object : Handler(flipperThread.looper) {
             override fun handleMessage(msg: Message) {
                 when (msg.what) {
-
-                    /** 如WS推送：插队并立即显示 */
-                    MSG_ADD_FIRST -> {
+                    MSG_ADD -> {
                         val text = msg.obj as? String ?: return
-                        queue.addFirst(text)
+                        queue.offer(text)
+                        currentIndex = queue.size - 1
                         showText(text)
-                        scheduleNext()
+                        removeMessages(MSG_NEXT)
+                        sendEmptyMessageDelayed(MSG_NEXT, flipInterval)
                     }
-
-                    /** 历史消息：顺序追加 */
-                    MSG_ADD_LAST -> {
-                        val text = msg.obj as? String ?: return
-                        queue.addLast(text)
-                        if (currentText == null) {
-                            showText(text)
-                            scheduleNext()
-                        }
-                    }
-
-                    /** 自动翻页 */
                     MSG_NEXT -> {
-                        val next = queue.pollFirst()
-                        if (next != null) {
-                            showText(next)
-                            scheduleNext()
-                        } else {
-                            uiHandler.post {
-                                flipperListener?.onFlipFinish()
-                            }
-                        }
+                        if (queue.isEmpty()) return
+                        currentIndex = (currentIndex + 1) % queue.size
+                        val next = queue.element()  // 保留队列首元素
+                        // 循环队列：将首元素移到尾部
+                        queue.poll()?.let { queue.offer(it) }
+                        showText(next)
+                        removeMessages(MSG_NEXT)
+                        sendEmptyMessageDelayed(MSG_NEXT, flipInterval)
                     }
                 }
             }
@@ -183,17 +131,15 @@ class DoraFlipperView @JvmOverloads constructor(
 
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
         super.onSizeChanged(w, h, oldw, oldh)
-        inAnimation = TranslateAnimation(0f, 0f, h.toFloat(), 0f).apply {
-            duration = 500
-        }
-        outAnimation = TranslateAnimation(0f, 0f, 0f, -h.toFloat()).apply {
-            duration = 500
-        }
+        val inAnim = TranslateAnimation(0f, 0f, h.toFloat(), 0f).apply { duration = 500 }
+        val outAnim = TranslateAnimation(0f, 0f, 0f, -h.toFloat()).apply { duration = 500 }
+        inAnimation = inAnim
+        outAnimation = outAnim
     }
 
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
-        scheduleNext()
+        workerHandler.sendEmptyMessageDelayed(MSG_NEXT, flipInterval)
     }
 
     override fun onDetachedFromWindow() {
@@ -203,33 +149,25 @@ class DoraFlipperView @JvmOverloads constructor(
         uiHandler.removeCallbacksAndMessages(null)
     }
 
-    /**
-     * 添加历史消息（尾插）。
-     */
     fun addText(text: String) {
-        workerHandler.obtainMessage(MSG_ADD_LAST, text).sendToTarget()
+        workerHandler.obtainMessage(MSG_ADD, text).also { it.sendToTarget() }
     }
 
     /**
-     * 添加推送消息（头插，立即显示）。
+     * 返回当前队列中的消息总数。
      */
-    fun addTextFirst(text: String) {
-        workerHandler.obtainMessage(MSG_ADD_FIRST, text).sendToTarget()
+    fun getQueueSize(): Int {
+        return queue.size
     }
 
-    /**
-     * 清空所有消息并重置状态。
-     */
     fun clear() {
         workerHandler.removeCallbacksAndMessages(null)
         queue.clear()
         currentText = null
+        currentIndex = -1
         hasStarted = false
     }
 
-    /**
-     * 设置翻页监听。
-     */
     fun setFlipperListener(listener: FlipperListener) {
         flipperListener = listener
     }
@@ -238,16 +176,12 @@ class DoraFlipperView @JvmOverloads constructor(
         uiHandler.post {
             currentText = text
             setText(text)
-
             if (!hasStarted) {
                 hasStarted = true
                 flipperListener?.onFlipStart()
+            } else if (queue.isEmpty()) {
+                flipperListener?.onFlipFinish()
             }
         }
-    }
-
-    private fun scheduleNext() {
-        workerHandler.removeMessages(MSG_NEXT)
-        workerHandler.sendEmptyMessageDelayed(MSG_NEXT, flipInterval)
     }
 }
