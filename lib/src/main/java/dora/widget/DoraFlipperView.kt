@@ -49,7 +49,6 @@ class DoraFlipperView @JvmOverloads constructor(
         fun onFlipStart()
         fun onFlipFinish()
     }
-
     private var flipperListener: FlipperListener? = null
 
     init {
@@ -109,20 +108,26 @@ class DoraFlipperView @JvmOverloads constructor(
                     MSG_ADD -> {
                         val text = msg.obj as? String ?: return
                         queue.offer(text)
-                        currentIndex = queue.size - 1
+                        if (currentIndex == -1) currentIndex = 0
                         showText(text)
                         removeMessages(MSG_NEXT)
                         sendEmptyMessageDelayed(MSG_NEXT, flipInterval)
                     }
                     MSG_NEXT -> {
-                        if (queue.isEmpty()) return
-                        currentIndex = (currentIndex + 1) % queue.size
-                        val next = queue.element()  // 保留队列首元素
-                        // 循环队列：将首元素移到尾部
-                        queue.poll()?.let { queue.offer(it) }
-                        showText(next)
-                        removeMessages(MSG_NEXT)
-                        sendEmptyMessageDelayed(MSG_NEXT, flipInterval)
+                        val next = queue.poll()
+                        if (!next.isNullOrEmpty()) {
+                            currentIndex++
+                            showText(next)
+                            removeMessages(MSG_NEXT)
+                            sendEmptyMessageDelayed(MSG_NEXT, flipInterval)
+                        } else {
+                            // 队列已空，先显示最后一条 flipInterval，再触发 complete
+                            uiHandler.postDelayed({
+                                setText("")
+                                currentIndex = -1
+                                flipperListener?.onFlipFinish()
+                            }, flipInterval)
+                        }
                     }
                 }
             }
@@ -153,24 +158,20 @@ class DoraFlipperView @JvmOverloads constructor(
         workerHandler.obtainMessage(MSG_ADD, text).also { it.sendToTarget() }
     }
 
-    /**
-     * 返回当前队列中的消息总数。
-     */
-    fun getQueueSize(): Int {
-        return queue.size
-    }
-
     fun clear() {
         workerHandler.removeCallbacksAndMessages(null)
         queue.clear()
         currentText = null
         currentIndex = -1
         hasStarted = false
+        uiHandler.post { setText("") }
     }
 
     fun setFlipperListener(listener: FlipperListener) {
         flipperListener = listener
     }
+
+    fun getQueueSize(): Int = queue.size
 
     private fun showText(text: String) {
         uiHandler.post {
@@ -179,8 +180,6 @@ class DoraFlipperView @JvmOverloads constructor(
             if (!hasStarted) {
                 hasStarted = true
                 flipperListener?.onFlipStart()
-            } else if (queue.isEmpty()) {
-                flipperListener?.onFlipFinish()
             }
         }
     }

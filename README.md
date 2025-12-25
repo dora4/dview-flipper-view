@@ -22,7 +22,7 @@ allprojects {
 }
 // 添加以下代码到app模块的build.gradle
 dependencies {
-    implementation 'com.github.dora4:dview-flipper-view:1.4'
+    implementation 'com.github.dora4:dview-flipper-view:1.6'
 }
 ```
 
@@ -105,7 +105,7 @@ binding.fv1.setFlipperListener(object : DoraFlipperView.FlipperListener {
             override fun onFlipStart() {
             }
 
-            override fun onItemClick(text: String) {
+            override fun onItemClick(index: Int, text: String) {
             }
         })
         // 航班 1
