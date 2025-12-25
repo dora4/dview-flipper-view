@@ -22,7 +22,7 @@ allprojects {
 }
 // 添加以下代码到app模块的build.gradle
 dependencies {
-    implementation 'com.github.dora4:dview-flipper-view:1.6'
+    implementation 'com.github.dora4:dview-flipper-view:1.8'
 }
 ```
 

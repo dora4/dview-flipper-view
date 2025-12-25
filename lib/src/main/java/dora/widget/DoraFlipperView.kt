@@ -25,12 +25,13 @@ class DoraFlipperView @JvmOverloads constructor(
         private const val MSG_ADD = 1
         private const val MSG_NEXT = 2
         private const val DEFAULT_INTERVAL = 10_000L
-        private const val DEFAULT_TEXT_COLOR = Color.BLACK
+        private val DEFAULT_TEXT_COLOR = Color.BLACK
         private const val DEFAULT_TEXT_SIZE_SP = 14f
         private const val DEFAULT_PADDING_DP = 10f
     }
 
     private val queue = LinkedBlockingQueue<String>()
+    private val displayList = mutableListOf<String>() // 保存顺序
     private val uiHandler = Handler(Looper.getMainLooper())
     private val flipperThread = HandlerThread("DoraFlipperThread").apply { start() }
     private val workerHandler: Handler
@@ -41,7 +42,7 @@ class DoraFlipperView @JvmOverloads constructor(
     private val paddingPx: Int
 
     private var currentText: String? = null
-    private var currentIndex: Int = -1
+    private var currentIndex: Int = 0
     private var hasStarted = false
 
     interface FlipperListener {
@@ -50,7 +51,6 @@ class DoraFlipperView @JvmOverloads constructor(
         fun onFlipStart()
         fun onFlipFinish()
     }
-
     private var flipperListener: FlipperListener? = null
 
     init {
@@ -110,29 +110,33 @@ class DoraFlipperView @JvmOverloads constructor(
                     MSG_ADD -> {
                         val text = msg.obj as? String ?: return
                         queue.offer(text)
-                        if (currentIndex == -1) {
+                        displayList.add(text)
+                        if (!hasStarted) {
                             currentIndex = 0
-                            sendEmptyMessage(MSG_NEXT)
+                            showText(text)
+                            flipperListener?.onLoadText(currentIndex, text)
+                            hasStarted = true
+                            flipperListener?.onFlipStart()
                         }
+                        removeMessages(MSG_NEXT)
+                        sendEmptyMessageDelayed(MSG_NEXT, flipInterval)
                     }
                     MSG_NEXT -> {
-                        val next = queue.peek()
-                        if (!next.isNullOrEmpty()) {
-                            currentText = next
-                            showText(next)
-                            flipperListener?.onLoadText(currentIndex, next)
-                            currentIndex++
-                            queue.poll()
-                            if (queue.isNotEmpty()) {
-                                removeMessages(MSG_NEXT)
-                                sendEmptyMessageDelayed(MSG_NEXT, flipInterval)
-                            } else {
-                                uiHandler.postDelayed({
-                                    setText("")
-                                    currentIndex = -1
-                                    flipperListener?.onFlipFinish()
-                                }, flipInterval)
-                            }
+                        if (displayList.isEmpty()) return
+                        currentIndex++
+                        if (currentIndex >= displayList.size) {
+                            // 最后一条停留 flipInterval 后完成
+                            uiHandler.postDelayed({
+                                flipperListener?.onFlipFinish()
+                                setText("")
+                                currentIndex = 0
+                            }, flipInterval)
+                        } else {
+                            val text = displayList[currentIndex]
+                            showText(text)
+                            flipperListener?.onLoadText(currentIndex, text)
+                            removeMessages(MSG_NEXT)
+                            sendEmptyMessageDelayed(MSG_NEXT, flipInterval)
                         }
                     }
                 }
@@ -167,8 +171,9 @@ class DoraFlipperView @JvmOverloads constructor(
     fun clear() {
         workerHandler.removeCallbacksAndMessages(null)
         queue.clear()
+        displayList.clear()
         currentText = null
-        currentIndex = -1
+        currentIndex = 0
         hasStarted = false
         uiHandler.post { setText("") }
     }
@@ -177,15 +182,9 @@ class DoraFlipperView @JvmOverloads constructor(
         flipperListener = listener
     }
 
-    fun getQueueSize(): Int = queue.size
+    fun getQueueSize(): Int = displayList.size
 
     private fun showText(text: String) {
-        uiHandler.post {
-            setText(text)
-            if (!hasStarted) {
-                hasStarted = true
-                flipperListener?.onFlipStart()
-            }
-        }
+        uiHandler.post { currentText = text; setText(text) }
     }
 }
