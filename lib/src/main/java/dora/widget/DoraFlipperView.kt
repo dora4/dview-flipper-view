@@ -98,7 +98,9 @@ class DoraFlipperView @JvmOverloads constructor(
                 setPadding(paddingPx, paddingPx, paddingPx, paddingPx)
                 setOnClickListener {
                     currentText?.let { text ->
-                        flipperListener?.onItemClick(currentIndex, text)
+                        if (currentIndex > -1) {
+                            flipperListener?.onItemClick(currentIndex, text)
+                        }
                     }
                 }
             }
@@ -125,11 +127,10 @@ class DoraFlipperView @JvmOverloads constructor(
                         if (displayList.isEmpty()) return
                         currentIndex++
                         if (currentIndex >= displayList.size) {
-                            // 最后一条停留 flipInterval 后完成
                             uiHandler.postDelayed({
                                 flipperListener?.onFlipFinish()
                                 setText("")
-                                currentIndex = 0
+                                currentIndex = -1
                             }, flipInterval)
                         } else {
                             val text = displayList[currentIndex]
