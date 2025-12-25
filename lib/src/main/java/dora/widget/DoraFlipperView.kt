@@ -98,9 +98,7 @@ class DoraFlipperView @JvmOverloads constructor(
                 setPadding(paddingPx, paddingPx, paddingPx, paddingPx)
                 setOnClickListener {
                     currentText?.let { text ->
-                        if (currentIndex > -1) {
-                            flipperListener?.onItemClick(currentIndex, text)
-                        }
+                        flipperListener?.onItemClick(currentIndex, text)
                     }
                 }
             }
@@ -125,14 +123,15 @@ class DoraFlipperView @JvmOverloads constructor(
                     }
                     MSG_NEXT -> {
                         if (displayList.isEmpty()) return
-                        currentIndex++
-                        if (currentIndex >= displayList.size) {
+                        val nextIndex = currentIndex + 1
+                        if (nextIndex >= displayList.size) {
+                            // 到最后一条，延迟清空
                             uiHandler.postDelayed({
                                 flipperListener?.onFlipFinish()
-                                setText("")
-                                currentIndex = -1
+                                // currentIndex 不再自增
                             }, flipInterval)
                         } else {
+                            currentIndex = nextIndex
                             val text = displayList[currentIndex]
                             showText(text)
                             flipperListener?.onLoadText(currentIndex, text)
@@ -140,6 +139,7 @@ class DoraFlipperView @JvmOverloads constructor(
                             sendEmptyMessageDelayed(MSG_NEXT, flipInterval)
                         }
                     }
+
                 }
             }
         }
