@@ -14,6 +14,7 @@ import android.view.animation.TranslateAnimation
 import android.widget.TextSwitcher
 import android.widget.TextView
 import androidx.core.content.withStyledAttributes
+import dora.widget.flipperview.R
 import java.util.concurrent.LinkedBlockingQueue
 
 class DoraFlipperView @JvmOverloads constructor(
