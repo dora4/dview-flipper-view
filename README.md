@@ -108,7 +108,7 @@ binding.fv1.setFlipperListener(object : DoraFlipperView.FlipperListener {
             override fun onLoadText(index: Int, text: String) {
             }
 
-            override fun onItemClick(index: Int, text: String) {
+            override fun onClickText(index: Int, text: String) {
             }
         })
         // 航班 1
