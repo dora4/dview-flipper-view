@@ -300,9 +300,12 @@ class DoraFlipperView @JvmOverloads constructor(
         }
     }
 
-    fun setRotatePeriod(period: Long) {
-        if (period <= 0) return
-        flipperInterval = if (period <= animationDuration) {
+    /**
+     * 设置轮播间隔。
+     */
+    fun setCarouseInterval(timeMs: Long) {
+        if (timeMs <= 0) return
+        flipperInterval = if (timeMs <= animationDuration) {
             animationDuration + 100
         } else {
             period
@@ -346,6 +349,15 @@ class DoraFlipperView @JvmOverloads constructor(
         )
     }
 
+    /**
+     * 停止轮播。
+     */
+    fun stop() {
+        hasStarted = false
+        workerHandler.removeMessages(MSG_NEXT)
+        workerHandler.removeMessages(MSG_ADD)
+    }
+    
     private fun showText(
         index: Int,
         text: String
@@ -446,12 +458,6 @@ class DoraFlipperView @JvmOverloads constructor(
 
     fun setListener(flipperListener: FlipperListener) {
         this.flipperListener = flipperListener
-    }
-
-    fun stop() {
-        hasStarted = false
-        workerHandler.removeMessages(MSG_NEXT)
-        workerHandler.removeMessages(MSG_ADD)
     }
 
     enum class PlayMode {
