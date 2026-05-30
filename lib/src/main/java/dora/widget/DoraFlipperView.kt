@@ -21,65 +21,31 @@ class DoraFlipperView @JvmOverloads constructor(
     attrs: AttributeSet? = null
 ) : TextSwitcher(context, attrs) {
 
-    companion object {
-
-        private const val MSG_ADD = 1
-        private const val MSG_NEXT = 2
-        private const val MAX_QUEUE_SIZE = 300
-        private const val MAX_CACHE_SIZE = 100
-        private const val DEFAULT_CAROUSE_INTERVAL = 10_000L
-        private const val DEFAULT_ANIMATION_DURATION = 500L
-
-        private const val DEFAULT_TEXT_COLOR = Color.BLACK
-        private const val DEFAULT_TEXT_SIZE_SP = 14f
-        private const val DEFAULT_PADDING_DP = 10f
-    }
     private val queue = LinkedBlockingQueue<String>()
     private val displayList = ArrayDeque<String>()
-
     private val uiHandler = Handler(Looper.getMainLooper())
-
     private val flipperThread = HandlerThread(
         "DoraFlipperThread"
     ).apply {
         start()
     }
-
     private val workerHandler: Handler
-
     private var flipperInterval: Long = DEFAULT_CAROUSE_INTERVAL
     private var textColor: Int = DEFAULT_TEXT_COLOR
     private var textSizePx: Float = 10f
     private var paddingPx: Int = 0
-
     private var currentText: String? = null
     private var currentIndex: Int = 0
-
-    /**
-     * 是否已经启动轮播。
-     */
     private var hasStarted = false
-
-    /**
-     * 播放模式，循环或停在最后一条。
-     */
     private var playMode = PlayMode.STOP_AT_LAST
-
-    /**
-     * 动画时长。
-     */
     private var animationDuration = DEFAULT_ANIMATION_DURATION
-
     private val lock = Any()
 
     interface FlipperListener {
 
         fun onClickText(index: Int, text: String)
-
         fun onLoadText(index: Int, text: String)
-
         fun onFlipStart()
-
         fun onFlipFinish()
     }
 
@@ -125,15 +91,12 @@ class DoraFlipperView @JvmOverloads constructor(
                     LayoutParams.WRAP_CONTENT
                 )
                 gravity = Gravity.CENTER_VERTICAL
-
                 setSingleLine()
-                // 长文本开启跑马灯
                 ellipsize = TextUtils.TruncateAt.MARQUEE
-                marqueeRepeatLimit = -1 // 跑马灯无限循环
+                marqueeRepeatLimit = -1
                 isSelected = true
                 isFocusable = true
                 isFocusableInTouchMode = true
-
                 setTextColor(textColor)
                 setTextSize(
                     TypedValue.COMPLEX_UNIT_PX,
@@ -162,14 +125,12 @@ class DoraFlipperView @JvmOverloads constructor(
 
             override fun handleMessage(msg: Message) {
                 when (msg.what) {
-                    // 新增
                     MSG_ADD -> {
                         val text = msg.obj as? String
                             ?: return
                         if (text.isBlank()) {
                             return
                         }
-                        // 队列超限，丢弃最旧数据
                         while (queue.size >= MAX_QUEUE_SIZE) {
                             queue.poll()
                         }
@@ -178,7 +139,6 @@ class DoraFlipperView @JvmOverloads constructor(
                             start()
                         }
                     }
-                    // 下一条
                     MSG_NEXT -> {
                         if (displayList.size == 1 &&
                             playMode == PlayMode.STOP_AT_LAST) {
@@ -187,41 +147,31 @@ class DoraFlipperView @JvmOverloads constructor(
                             flipperListener?.onFlipFinish()
                             return
                         }
-                        // 消费积压队列
                         while (true) {
-                            val text = queue.poll()
-                                ?: break
+                            val text = queue.poll() ?: break
                             synchronized(lock) {
                                 displayList.addLast(text)
-                                // 限制最大缓存数量
                                 if (displayList.size > MAX_CACHE_SIZE) {
                                     displayList.removeFirst()
-                                    // 防止索引错乱
                                     if (currentIndex > 0) {
                                         currentIndex--
                                     }
                                 }
                             }
                         }
-                        // 播放列表为空
                         if (displayList.isEmpty()) {
                             hasStarted = false
                             flipperListener?.onFlipFinish()
                             removeMessages(MSG_NEXT)
                             return
                         }
-                        // 多条才轮播
                         if (displayList.size > 1) {
-                            // 已经最后一条
                             if (currentIndex >= displayList.size - 1) {
                                 when (playMode) {
-                                    // 循环播放
                                     PlayMode.LOOP -> {
                                         currentIndex = 0
                                     }
-                                    // 播放完停止
                                     PlayMode.STOP_AT_LAST -> {
-                                        // 停在最后一条
                                         currentIndex = displayList.size - 1
                                         removeMessages(MSG_NEXT)
                                         hasStarted = false
@@ -233,7 +183,6 @@ class DoraFlipperView @JvmOverloads constructor(
                                 currentIndex++
                             }
                         } else {
-                            // 单条固定显示
                             currentIndex = 0
                         }
                         synchronized(lock) {
@@ -250,10 +199,7 @@ class DoraFlipperView @JvmOverloads constructor(
                                 text
                             )
                         }
-
-                        // 防止重复MSG
                         removeMessages(MSG_NEXT)
-                        // 继续下一轮
                         sendEmptyMessageDelayed(
                             MSG_NEXT,
                             flipperInterval
@@ -273,7 +219,6 @@ class DoraFlipperView @JvmOverloads constructor(
             return
         }
         animationDuration = duration
-        // 立即刷新动画
         post {
             val h = height
             if (h <= 0) {
@@ -300,9 +245,6 @@ class DoraFlipperView @JvmOverloads constructor(
         }
     }
 
-    /**
-     * 设置轮播间隔。
-     */
     fun setCarouseInterval(timeMs: Long) {
         if (timeMs <= 0) return
         flipperInterval = if (timeMs <= animationDuration) {
@@ -319,9 +261,6 @@ class DoraFlipperView @JvmOverloads constructor(
         }
     }
 
-    /**
-     * 开始轮播。
-     */
     private fun start() {
         val first = queue.poll()
             ?: return
@@ -349,9 +288,6 @@ class DoraFlipperView @JvmOverloads constructor(
         )
     }
 
-    /**
-     * 停止轮播。
-     */
     fun stop() {
         hasStarted = false
         workerHandler.removeMessages(MSG_NEXT)
@@ -369,24 +305,9 @@ class DoraFlipperView @JvmOverloads constructor(
         }
     }
 
-    override fun onSizeChanged(
-        w: Int,
-        h: Int,
-        oldw: Int,
-        oldh: Int
-    ) {
-        super.onSizeChanged(
-            w,
-            h,
-            oldw,
-            oldh
-        )
-        val inAnim = TranslateAnimation(
-            0f,
-            0f,
-            h.toFloat(),
-            0f
-        ).apply {
+    override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
+        super.onSizeChanged(w, h, oldw, oldh)
+        val inAnim = TranslateAnimation(0f, 0f, h.toFloat(), 0f).apply {
             duration = animationDuration
         }
         val outAnim = TranslateAnimation(
@@ -449,19 +370,29 @@ class DoraFlipperView @JvmOverloads constructor(
         }
     }
 
-    /**
-     * 当前消息数量。
-     */
     fun getQueueSize(): Int {
         return displayList.size + queue.size
     }
 
-    fun setListener(flipperListener: FlipperListener) {
+    fun setFlipperListener(flipperListener: FlipperListener) {
         this.flipperListener = flipperListener
     }
 
     enum class PlayMode {
-        LOOP,          // 循环播放
-        STOP_AT_LAST   // 播放完停在最后一条
+        LOOP,
+        STOP_AT_LAST
+    }
+    
+    companion object {
+
+        private const val MSG_ADD = 1
+        private const val MSG_NEXT = 2
+        private const val MAX_QUEUE_SIZE = 300
+        private const val MAX_CACHE_SIZE = 100
+        private const val DEFAULT_CAROUSE_INTERVAL = 10_000L
+        private const val DEFAULT_ANIMATION_DURATION = 500L
+        private const val DEFAULT_TEXT_COLOR = Color.BLACK
+        private const val DEFAULT_TEXT_SIZE_SP = 14f
+        private const val DEFAULT_PADDING_DP = 10f
     }
 }
