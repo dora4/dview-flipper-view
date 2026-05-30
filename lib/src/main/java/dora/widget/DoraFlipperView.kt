@@ -123,7 +123,6 @@ class DoraFlipperView @JvmOverloads constructor(
         workerHandler = object : Handler(
             flipperThread.looper
         ) {
-
             override fun handleMessage(msg: Message) {
                 when (msg.what) {
                     MSG_ADD -> {
@@ -251,7 +250,7 @@ class DoraFlipperView @JvmOverloads constructor(
         flipperInterval = if (timeMs <= animationDuration) {
             animationDuration + 100
         } else {
-            period
+            timeMs
         }
         if (hasStarted) {
             workerHandler.removeMessages(MSG_NEXT)
@@ -375,8 +374,8 @@ class DoraFlipperView @JvmOverloads constructor(
         return displayList.size + queue.size
     }
 
-    fun setFlipperListener(flipperListener: FlipperListener) {
-        this.flipperListener = flipperListener
+    fun setFlipperListener(listener: FlipperListener) {
+        this.flipperListener = listener
     }
 
     enum class PlayMode {
